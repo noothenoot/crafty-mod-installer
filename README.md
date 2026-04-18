@@ -1,4 +1,4 @@
-# 🛠️ Crafty Mod Installer
+# Crafty Mod Installer
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js](https://img.shields.io/badge/Node.js-v18%2B-green.svg)](https://nodejs.org/)
@@ -9,13 +9,13 @@ An automated command-line tool designed to bridge **Crafty Controller** with **M
 
 ## ✨ Features
 
-- 🔗 **Dual Platform Support**: Seamlessly integrate with Modrinth (`.mrpack`) and CurseForge (official API).
-- 🏗️ **Automatic Server Creation**: Create new Minecraft instances in Crafty directly from the CLI.
-- ⚡ **Local/Remote Modes**: 
+- **Dual Platform Support**: Seamlessly integrate with Modrinth (`.mrpack`) and CurseForge (official API).
+- **Automatic Server Creation**: Create new Minecraft instances in Crafty directly from the CLI.
+- **Local/Remote Modes**: 
   - **Local**: Blazing fast direct filesystem installation.
   - **Remote**: Prepares files for upload or communicates via API.
-- 📦 **Modpack Awareness**: Automatically handles `manifest.json`, `modrinth.index.json`, and server-side overrides.
-- 💬 **Interactive Interface**: Step-by-step prompts for selecting versions, file types, and server settings.
+- **Modpack Awareness**: Automatically handles `manifest.json`, `modrinth.index.json`, and server-side overrides.
+- **Interactive Interface**: Step-by-step prompts for selecting versions, file types, and server settings.
 
 ---
 
@@ -30,7 +30,7 @@ An automated command-line tool designed to bridge **Crafty Controller** with **M
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/crafty-mod-installer.git
+   git clone https://github.com/noothenoot/crafty-mod-installer.git
    cd crafty-mod-installer
    ```
 
