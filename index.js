@@ -100,16 +100,16 @@ async function main() {
 
         // 5. Installation
         console.log('🔄 Preparing installation...');
-        
+
         // Determine final target directory
         let targetDir = '';
         if (isLocal) {
             const serverInfo = await crafty.getServerDetails(targetServerId);
             // Crafty stores servers in folders named by their UUID or name
             // We assume the folder is in the base serverPath
-            targetDir = path.join(serverPath, serverInfo.server_id); 
+            targetDir = path.join(serverPath, serverInfo.server_id);
             // Note: Crafty 4 might use specific naming, we should verify info.path
-            if (serverInfo.path) targetDir = serverInfo.path; 
+            if (serverInfo.path) targetDir = serverInfo.path;
         } else {
             targetDir = path.join(process.cwd(), 'temp_server_files');
             await fs.ensureDir(targetDir);
@@ -146,3 +146,9 @@ async function main() {
         } else {
             console.log(`✅ Success! Files installed to: ${targetDir}`);
         }
+    } catch (err) {
+        console.error('❌ Error:', err.message);
+    }
+}
+
+main();
