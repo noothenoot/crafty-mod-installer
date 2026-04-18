@@ -1,0 +1,6 @@
+.env
+node_modules
+temp_pack.zip
+temp_pack.mrpack
+temp_server_files/
+.DS_Store

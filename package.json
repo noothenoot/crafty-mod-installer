@@ -1,0 +1,17 @@
+{
+  "name": "crafty-mod-installer",
+  "version": "1.0.0",
+  "description": "Automated modpack installer for Crafty Controller",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "axios": "^1.6.0",
+    "curseforge-api": "^1.2.0",
+    "dotenv": "^16.3.1",
+    "inquirer": "^9.2.11",
+    "adm-zip": "^0.5.10",
+    "fs-extra": "^11.1.1"
+  }
+}
