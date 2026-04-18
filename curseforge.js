@@ -47,40 +47,72 @@ class CurseForgeHandler {
         });
     }
 
-    async installModpack(modId, fileId, targetDir) {
-        console.log(`Downloading CurseForge pack (Mod: ${modId}, File: ${fileId})...`);
+    async installMod(modId, fileId, targetDir) {
+        console.log(`Downloading CurseForge file (Mod: ${modId}, File: ${fileId})...`);
         
         const file = await this.client.getModFile(modId, fileId);
         if (!file.downloadUrl) throw new Error('Download URL not found for this file.');
         
-        const tempPath = path.join(process.cwd(), 'temp_pack.zip');
+        const fileName = file.fileName;
+        const tempPath = path.join(process.cwd(), fileName);
         await this.downloadFile(file.downloadUrl, tempPath);
 
-        const zip = new AdmZip(tempPath);
-        const manifestEntry = zip.getEntry('manifest.json');
-        if (!manifestEntry) throw new Error('Invalid CurseForge pack: missing manifest.json');
-
-        const manifest = JSON.parse(zip.readAsText(manifestEntry));
-        const modsDir = path.join(targetDir, 'mods');
-        await fs.ensureDir(modsDir);
-
-        console.log(`Downloading ${manifest.files.length} mods from CurseForge...`);
-        for (const fileInfo of manifest.files) {
-            const modFile = await this.client.getModFile(fileInfo.projectID, fileInfo.fileID);
-            const destPath = path.join(modsDir, modFile.fileName);
-            console.log(`  Downloading ${modFile.fileName}...`);
-            await this.downloadFile(modFile.downloadUrl, destPath);
+        // If it's a jar, move it to mods
+        if (fileName.endsWith('.jar')) {
+            const modsDir = path.join(targetDir, 'mods');
+            await fs.ensureDir(modsDir);
+            await fs.move(tempPath, path.join(modsDir, fileName), { overwrite: true });
+            console.log('✅ Mod installation complete!');
+            return;
         }
 
-        // Handle overrides
-        const overridesEntry = zip.getEntry('overrides/');
-        if (overridesEntry) {
-            console.log('Applying overrides...');
-            zip.extractAllTo(targetDir, true);
+        // If it's a zip, check if it's a modpack
+        if (fileName.endsWith('.zip')) {
+            const zip = new AdmZip(tempPath);
+            const manifestEntry = zip.getEntry('manifest.json');
+            
+            if (manifestEntry) {
+                console.log('Detected CurseForge Modpack. Installing...');
+                const manifest = JSON.parse(zip.readAsText(manifestEntry));
+                const modsDir = path.join(targetDir, 'mods');
+                await fs.ensureDir(modsDir);
+
+                console.log(`Downloading ${manifest.files.length} mods from CurseForge...`);
+                for (const fileInfo of manifest.files) {
+                    const modFile = await this.client.getModFile(fileInfo.projectID, fileInfo.fileID);
+                    const destPath = path.join(modsDir, modFile.fileName);
+                    console.log(`  Downloading ${modFile.fileName}...`);
+                    await this.downloadFile(modFile.downloadUrl, destPath);
+                }
+
+                // Handle overrides
+                const overridesDir = 'overrides';
+                const zipEntries = zip.getEntries();
+                zipEntries.forEach(entry => {
+                    if (entry.entryName.startsWith(overridesDir + '/')) {
+                        const relativePath = entry.entryName.substring(overridesDir.length + 1);
+                        if (relativePath) {
+                            const dest = path.join(targetDir, relativePath);
+                            if (entry.isDirectory) {
+                                fs.ensureDirSync(dest);
+                            } else {
+                                fs.ensureDirSync(path.dirname(dest));
+                                fs.writeFileSync(dest, entry.getData());
+                            }
+                        }
+                    }
+                });
+                console.log('✅ Modpack installation complete!');
+            } else {
+                // Just a zipped mod? (rare but possible)
+                const modsDir = path.join(targetDir, 'mods');
+                await fs.ensureDir(modsDir);
+                await fs.move(tempPath, path.join(modsDir, fileName), { overwrite: true });
+                console.log('✅ Zipped mod installed to mods folder.');
+            }
         }
         
-        await fs.remove(tempPath);
-        console.log('CurseForge installation complete!');
+        if (await fs.pathExists(tempPath)) await fs.remove(tempPath);
     }
 }
 

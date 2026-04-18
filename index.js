@@ -142,7 +142,7 @@ async function main() {
                         }))
                     }
                 ]);
-                await curseforge.installModpack(mod.id, fileSelection, targetDir);
+                await curseforge.installMod(mod.id, fileSelection, targetDir);
             }
 
             if (!isLocal) {
