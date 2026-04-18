@@ -9,7 +9,7 @@ const CurseForgeHandler = require('./curseforge');
 async function main() {
     console.log('--- Crafty Controller Mod Installer ---');
 
-    // 1. Initial Checks
+    // Configuration check
     if (!process.env.CRAFTY_URL || !process.env.CRAFTY_API_TOKEN) {
         console.error('Error: Please configure CRAFTY_URL and CRAFTY_API_TOKEN in .env file.');
         process.exit(1);
@@ -24,7 +24,7 @@ async function main() {
         if (!connected) throw new Error('Could not connect to Crafty Controller.');
         console.log('✅ Connected to Crafty Controller.');
 
-        // 2. Setup Mode
+        // Networking & Connection Mode
         const { isLocal } = await inquirer.prompt([
             {
                 type: 'confirm',
@@ -47,7 +47,7 @@ async function main() {
             serverPath = pathInput;
         }
 
-        // 3. Server Selection
+        // Server Selection logic
         const { serverAction } = await inquirer.prompt([
             {
                 type: 'list',
@@ -56,15 +56,29 @@ async function main() {
                 choices: ['Create New Server', 'Use Existing Server']
             }
         ]);
-
         let targetServerId = '';
+        let needsInit = false;
+
         if (serverAction === 'Create New Server') {
-            const { name, port, memory } = await inquirer.prompt([
+            needsInit = true;
+            const { name, version, type, port, memory } = await inquirer.prompt([
                 { type: 'input', name: 'name', message: 'Server Name:', default: 'Modded Server' },
+                { type: 'input', name: 'version', message: 'Minecraft Version:', default: '1.20.1' },
+                {
+                    type: 'list',
+                    name: 'type',
+                    message: 'Server Type:',
+                    choices: ['vanilla', 'paper', 'forge', 'fabric', 'quilt'],
+                    default: 'fabric'
+                },
                 { type: 'number', name: 'port', message: 'Port:', default: 25565 },
                 { type: 'number', name: 'memory', message: 'Memory (MB):', default: 4096 }
             ]);
-            const newServer = await crafty.createServer(name, 'minecraft_java', memory, port);
+            const newServer = await crafty.createServer(name, type, memory, port, version);
+            if (!newServer || !newServer.server_id) {
+                console.log('Creation response:', JSON.stringify(newServer));
+                throw new Error('Server created but could not retrieve Server ID.');
+            }
             targetServerId = newServer.server_id;
             console.log(`✅ Server created: ${name} (ID: ${targetServerId})`);
         } else {
@@ -80,7 +94,25 @@ async function main() {
             targetServerId = selection;
         }
 
-        // 4. Mod Selection Loop
+        // 3.5 Server Initialization Phase (Only for NEW servers)
+        if (needsInit) {
+            console.log('\n--- 🛠️ Server Setup Required ---');
+            console.log('1. Go to your Crafty Controller Web UI.');
+            console.log('2. Start the server and accept the EULA.');
+            console.log('3. Wait for the server to generate its files (look for the "mods" folder).');
+            console.log('4. STOP the server once it is initialized.');
+
+            await inquirer.prompt([
+                {
+                    type: 'input',
+                    name: 'continue',
+                    message: 'Press ENTER once the server files have been generated and the server is STOPPED...'
+                }
+            ]);
+            console.log('✅ Continuing with mod installation...\n');
+        }
+
+        // Mod selection and sync loop
         let keepInstalling = true;
         while (keepInstalling) {
             const { platform } = await inquirer.prompt([
@@ -100,7 +132,7 @@ async function main() {
                 }
             ]);
 
-            // 5. Installation
+            // Project preparation
             console.log('🔄 Preparing installation...');
 
             // Determine final target directory
@@ -121,9 +153,9 @@ async function main() {
                         type: 'list',
                         name: 'versionSelection',
                         message: 'Select a version to install:',
-                        choices: versions.slice(0, 10).map(v => ({ 
-                            name: `${v.version_number} [MC: ${v.game_versions.join(', ')}] (${v.loaders.join(', ')})`, 
-                            value: v.id 
+                        choices: versions.slice(0, 10).map(v => ({
+                            name: `${v.version_number} [MC: ${v.game_versions.join(', ')}] (${v.loaders.join(', ')})`,
+                            value: v.id
                         }))
                     }
                 ]);
@@ -136,9 +168,9 @@ async function main() {
                         type: 'list',
                         name: 'fileSelection',
                         message: 'Select a file to install:',
-                        choices: files.slice(0, 10).map(f => ({ 
-                            name: `${f.displayName} [MC: ${f.gameVersions.join(', ')}]`, 
-                            value: f.id 
+                        choices: files.slice(0, 10).map(f => ({
+                            name: `${f.displayName} [MC: ${f.gameVersions.join(', ')}]`,
+                            value: f.id
                         }))
                     }
                 ]);
@@ -149,14 +181,34 @@ async function main() {
                 console.log('🚀 Remote mode: Syncing files to Crafty...');
                 const modsDir = path.join(targetDir, 'mods');
                 if (await fs.pathExists(modsDir)) {
+                    const existingFiles = await crafty.listFiles(targetServerId, 'mods');
+                    const existingNames = existingFiles.map(f => f.name);
+
                     const files = await fs.readdir(modsDir);
                     for (const file of files) {
+                        if (existingNames.includes(file)) {
+                            console.log(`  Skipping ${file} (already exists)`);
+                            continue;
+                        }
                         console.log(`  Uploading ${file} to Crafty...`);
                         await crafty.uploadFile(targetServerId, path.join(modsDir, file), 'mods');
                     }
+
+                    // Verification Check
+                    console.log('\n🔍 Verifying installation on Crafty...');
+                    const finalRemoteFiles = await crafty.listFiles(targetServerId, 'mods');
+                    const finalRemoteNames = finalRemoteFiles.map(f => f.name);
+                    const missing = files.filter(f => !finalRemoteNames.includes(f));
+
+                    if (missing.length === 0) {
+                        console.log(`✅ All ${files.length} mods are successfully installed and verified on the server!`);
+                    } else {
+                        console.log(`⚠️ Verification failed! ${missing.length} / ${files.length} mods are missing:`);
+                        missing.forEach(m => console.log(`  - ${m}`));
+                    }
                 }
                 console.log('✅ Remote sync complete!');
-                await fs.remove(targetDir); 
+                await fs.remove(targetDir);
             } else {
                 console.log(`✅ Success! Files installed to: ${targetDir}`);
             }
