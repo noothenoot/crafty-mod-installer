@@ -12,12 +12,23 @@ class ModrinthHandler {
     }
 
     async getProject(id) {
-        const resp = await this.client.get(`/project/${id}`);
+        // Extract slug from URL if needed
+        let slug = id;
+        if (id.includes('modrinth.com')) {
+            const parts = id.split('/');
+            slug = parts[parts.length - 1] || parts[parts.length - 2];
+        }
+        const resp = await this.client.get(`/project/${slug}`);
         return resp.data;
     }
 
     async getVersion(versionId) {
         const resp = await this.client.get(`/version/${versionId}`);
+        return resp.data;
+    }
+
+    async getVersions(projectId) {
+        const resp = await this.client.get(`/project/${projectId}/version`);
         return resp.data;
     }
 
@@ -35,13 +46,29 @@ class ModrinthHandler {
         });
     }
 
-    async installModpack(versionId, targetDir) {
-        console.log(`Downloading Modrinth pack version: ${versionId}...`);
+    async installMod(versionId, targetDir) {
+        console.log(`Downloading Modrinth file version: ${versionId}...`);
         const version = await this.getVersion(versionId);
-        const mrpackFile = version.files.find(f => f.filename.endsWith('.mrpack'));
         
-        if (!mrpackFile) throw new Error('No .mrpack file found in this version');
+        // Find .mrpack for modpacks or the primary .jar for mods
+        const packFile = version.files.find(f => f.filename.endsWith('.mrpack'));
+        if (packFile) {
+            return await this.installModpack(version, packFile, targetDir);
+        }
 
+        const jarFile = version.files.find(f => f.primary) || version.files[0];
+        if (!jarFile) throw new Error('No files found for this version');
+
+        const modsDir = path.join(targetDir, 'mods');
+        await fs.ensureDir(modsDir);
+        const destPath = path.join(modsDir, jarFile.filename);
+        
+        console.log(`  Downloading ${jarFile.filename}...`);
+        await this.downloadFile(jarFile.url, destPath);
+        console.log('✅ Mod installation complete!');
+    }
+
+    async installModpack(version, mrpackFile, targetDir) {
         const tempPath = path.join(process.cwd(), 'temp_pack.mrpack');
         await this.downloadFile(mrpackFile.url, tempPath);
 
@@ -51,11 +78,7 @@ class ModrinthHandler {
 
         const index = JSON.parse(zip.readAsText(indexEntry));
         
-        // Ensure mods directory exists
-        const modsDir = path.join(targetDir, 'mods');
-        await fs.ensureDir(modsDir);
-
-        console.log(`Downloading ${index.files.length} mods...`);
+        console.log(`Downloading ${index.files.length} mods from pack...`);
         for (const file of index.files) {
             const destPath = path.join(targetDir, file.path);
             await fs.ensureDir(path.dirname(destPath));
@@ -65,11 +88,25 @@ class ModrinthHandler {
 
         // Handle overrides
         console.log('Applying overrides...');
-        zip.extractAllTo(targetDir, true); // This is a simplification; should only extract 'overrides' folder
-        // TODO: Properly merge overrides folder contents into root
+        const overridesDir = 'overrides';
+        const zipEntries = zip.getEntries();
+        zipEntries.forEach(entry => {
+            if (entry.entryName.startsWith(overridesDir + '/')) {
+                const relativePath = entry.entryName.substring(overridesDir.length + 1);
+                if (relativePath) {
+                    const dest = path.join(targetDir, relativePath);
+                    if (entry.isDirectory) {
+                        fs.ensureDirSync(dest);
+                    } else {
+                        fs.ensureDirSync(path.dirname(dest));
+                        fs.writeFileSync(dest, entry.getData());
+                    }
+                }
+            }
+        });
         
         await fs.remove(tempPath);
-        console.log('Modpack installation complete!');
+        console.log('✅ Modpack installation complete!');
     }
 }
 

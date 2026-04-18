@@ -11,13 +11,20 @@ class CurseForgeHandler {
     }
 
     async getMod(id) {
-        // identifier can be numeric ID or slug (though the library might need specific search for slug)
-        if (isNaN(id)) {
-            const results = await this.client.searchMods({ slug: id });
+        // Extract ID/slug from URL if needed
+        let identifier = id;
+        if (id.includes('curseforge.com')) {
+            const parts = id.split('/');
+            identifier = parts[parts.length - 1] || parts[parts.length - 2];
+        }
+
+        if (isNaN(identifier)) {
+            // 432 is the ID for Minecraft
+            const results = await this.client.searchMods(432, { slug: identifier });
             if (results.data.length === 0) throw new Error('Mod not found');
             return results.data[0];
         }
-        return await this.client.getMod(id);
+        return await this.client.getMod(identifier);
     }
 
     async getFiles(id) {

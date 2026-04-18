@@ -1,4 +1,8 @@
 const axios = require('axios');
+const https = require('https');
+const FormData = require('form-data');
+const fs = require('fs');
+const path = require('path');
 
 class CraftyClient {
     constructor(baseUrl, token) {
@@ -9,16 +13,25 @@ class CraftyClient {
             headers: {
                 'Authorization': `Bearer ${this.token}`,
                 'Content-Type': 'application/json'
-            }
+            },
+            httpsAgent: new https.Agent({  
+                rejectUnauthorized: false
+            })
         });
     }
 
     async testConnection() {
         try {
-            const resp = await this.client.get('/stats');
+            const resp = await this.client.get('/servers');
             return resp.status === 200;
         } catch (err) {
-            console.error('Crafty Connection Error:', err.message);
+            if (err.response) {
+                console.error(`Crafty Connection Error: ${err.response.status} - ${JSON.stringify(err.response.data)}`);
+            } else if (err.request) {
+                console.error(`Crafty Connection Error: No response received. Check if your CRAFTY_URL is correct and reachable.`);
+            } else {
+                console.error('Crafty Connection Error:', err.message);
+            }
             return false;
         }
     }
@@ -43,6 +56,30 @@ class CraftyClient {
         };
         const resp = await this.client.post('/servers', payload);
         return resp.data.data;
+    }
+
+    async uploadFile(serverId, localFilePath, remotePath = 'mods') {
+        const stats = fs.statSync(localFilePath);
+        const fileName = path.basename(localFilePath);
+        const fileId = Math.random().toString(36).substring(2, 15);
+        
+        // Remove leading slash for 'location' header
+        const targetLocation = remotePath.replace(/^\//, '');
+
+        console.log(`  Sending raw binary to Crafty (${(stats.size / 1024 / 1024).toFixed(2)} MB)...`);
+
+        const resp = await this.client.post(`/servers/${serverId}/files/upload`, fs.createReadStream(localFilePath), {
+            headers: {
+                'Content-Type': 'application/octet-stream',
+                'location': targetLocation,
+                'fileName': fileName,
+                'fileSize': stats.size.toString(),
+                'fileId': fileId
+            },
+            maxContentLength: Infinity,
+            maxBodyLength: Infinity
+        });
+        return resp.data;
     }
 }
 

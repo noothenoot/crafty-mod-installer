@@ -80,74 +80,100 @@ async function main() {
             targetServerId = selection;
         }
 
-        // 4. Mod Selection
-        const { platform } = await inquirer.prompt([
-            {
-                type: 'list',
-                name: 'platform',
-                message: 'Which platform are you using?',
-                choices: ['Modrinth', 'CurseForge']
-            }
-        ]);
-
-        const { identifier } = await inquirer.prompt([
-            {
-                type: 'input',
-                name: 'identifier',
-                message: `Enter ${platform} Link or ID:`
-            }
-        ]);
-
-        // 5. Installation
-        console.log('🔄 Preparing installation...');
-
-        // Determine final target directory
-        let targetDir = '';
-        if (isLocal) {
-            const serverInfo = await crafty.getServerDetails(targetServerId);
-            // Crafty stores servers in folders named by their UUID or name
-            // We assume the folder is in the base serverPath
-            targetDir = path.join(serverPath, serverInfo.server_id);
-            // Note: Crafty 4 might use specific naming, we should verify info.path
-            if (serverInfo.path) targetDir = serverInfo.path;
-        } else {
-            targetDir = path.join(process.cwd(), 'temp_server_files');
-            await fs.ensureDir(targetDir);
-        }
-
-        if (platform === 'Modrinth') {
-            const project = await modrinth.getProject(identifier);
-            const versions = await modrinth.getVersions(project.id);
-            const { versionSelection } = await inquirer.prompt([
+        // 4. Mod Selection Loop
+        let keepInstalling = true;
+        while (keepInstalling) {
+            const { platform } = await inquirer.prompt([
                 {
                     type: 'list',
-                    name: 'versionSelection',
-                    message: 'Select a version to install:',
-                    choices: versions.slice(0, 10).map(v => ({ name: `${v.version_number} (${v.loaders.join(', ')})`, value: v.id }))
+                    name: 'platform',
+                    message: 'Which platform are you using?',
+                    choices: ['Modrinth', 'CurseForge']
                 }
             ]);
-            await modrinth.installModpack(versionSelection, targetDir);
-        } else {
-            const mod = await curseforge.getMod(identifier);
-            const files = await curseforge.getFiles(mod.id);
-            const { fileSelection } = await inquirer.prompt([
-                {
-                    type: 'list',
-                    name: 'fileSelection',
-                    message: 'Select a file to install:',
-                    choices: files.slice(0, 10).map(f => ({ name: f.displayName, value: f.id }))
-                }
-            ]);
-            await curseforge.installModpack(mod.id, fileSelection, targetDir);
-        }
 
-        if (!isLocal) {
-            console.log('🚀 Remote mode: Files are in ./temp_server_files. Please upload them to Crafty.');
-        } else {
-            console.log(`✅ Success! Files installed to: ${targetDir}`);
+            const { identifier } = await inquirer.prompt([
+                {
+                    type: 'input',
+                    name: 'identifier',
+                    message: `Enter ${platform} Link or ID:`
+                }
+            ]);
+
+            // 5. Installation
+            console.log('🔄 Preparing installation...');
+
+            // Determine final target directory
+            let targetDir = '';
+            if (isLocal) {
+                const serverInfo = await crafty.getServerDetails(targetServerId);
+                targetDir = serverInfo.path || path.join(serverPath, serverInfo.server_id);
+            } else {
+                targetDir = path.join(process.cwd(), 'temp_server_files');
+                await fs.ensureDir(targetDir);
+            }
+
+            if (platform === 'Modrinth') {
+                const project = await modrinth.getProject(identifier);
+                const versions = await modrinth.getVersions(project.id);
+                const { versionSelection } = await inquirer.prompt([
+                    {
+                        type: 'list',
+                        name: 'versionSelection',
+                        message: 'Select a version to install:',
+                        choices: versions.slice(0, 10).map(v => ({ 
+                            name: `${v.version_number} [MC: ${v.game_versions.join(', ')}] (${v.loaders.join(', ')})`, 
+                            value: v.id 
+                        }))
+                    }
+                ]);
+                await modrinth.installMod(versionSelection, targetDir);
+            } else {
+                const mod = await curseforge.getMod(identifier);
+                const files = await curseforge.getFiles(mod.id);
+                const { fileSelection } = await inquirer.prompt([
+                    {
+                        type: 'list',
+                        name: 'fileSelection',
+                        message: 'Select a file to install:',
+                        choices: files.slice(0, 10).map(f => ({ 
+                            name: `${f.displayName} [MC: ${f.gameVersions.join(', ')}]`, 
+                            value: f.id 
+                        }))
+                    }
+                ]);
+                await curseforge.installModpack(mod.id, fileSelection, targetDir);
+            }
+
+            if (!isLocal) {
+                console.log('🚀 Remote mode: Syncing files to Crafty...');
+                const modsDir = path.join(targetDir, 'mods');
+                if (await fs.pathExists(modsDir)) {
+                    const files = await fs.readdir(modsDir);
+                    for (const file of files) {
+                        console.log(`  Uploading ${file} to Crafty...`);
+                        await crafty.uploadFile(targetServerId, path.join(modsDir, file), 'mods');
+                    }
+                }
+                console.log('✅ Remote sync complete!');
+                await fs.remove(targetDir); 
+            } else {
+                console.log(`✅ Success! Files installed to: ${targetDir}`);
+            }
+
+            const { another } = await inquirer.prompt([
+                {
+                    type: 'confirm',
+                    name: 'another',
+                    message: 'Do you want to install another mod?',
+                    default: false
+                }
+            ]);
+            keepInstalling = another;
         }
     } catch (err) {
         console.error('❌ Error:', err.message);
+        if (err.response) console.log(JSON.stringify(err.response.data));
     }
 }
 

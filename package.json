@@ -7,11 +7,12 @@
     "start": "node index.js"
   },
   "dependencies": {
+    "adm-zip": "^0.5.10",
     "axios": "^1.6.0",
     "curseforge-api": "^1.2.0",
     "dotenv": "^16.3.1",
-    "inquirer": "^9.2.11",
-    "adm-zip": "^0.5.10",
-    "fs-extra": "^11.1.1"
+    "form-data": "^4.0.5",
+    "fs-extra": "^11.3.4",
+    "inquirer": "^8.2.5"
   }
 }
